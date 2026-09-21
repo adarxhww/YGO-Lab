@@ -1,0 +1,360 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  username     String   @unique
+  displayName  String
+  avatarUrl    String?
+  bio          String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  accounts       Account[]
+  journalEntries JournalEntry[]
+  lessonProgress LessonProgress[]
+  userChallenges UserChallenge[]
+
+  // Community
+  posts         Post[]
+  comments      Comment[]
+  likes         PostLike[]
+  followers     Follow[]       @relation("FollowedUser")
+  following     Follow[]       @relation("FollowingUser")
+  notifications Notification[]
+}
+
+model Account {
+  id             String   @id @default(uuid())
+  userId         String
+  currency       String   @default("INR")
+  cashBalance    Decimal  @db.Decimal(18, 4)
+  reservedMargin Decimal  @db.Decimal(18, 4)
+  isSimulated    Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user         User                @relation(fields: [userId], references: [id])
+  executions   Execution[]
+  orders       Order[]
+  snapshots    PortfolioSnapshot[]
+  positions    Position[]
+  trades       Trade[]
+  transactions Transaction[]
+
+  @@index([userId])
+}
+
+model Instrument {
+  id       String  @id @default(uuid())
+  symbol   String  @unique
+  name     String
+  exchange String
+  type     String
+  lotSize  Int     @default(1)
+  tickSize Decimal @db.Decimal(18, 4)
+  isActive Boolean @default(true)
+
+  prices    MarketPrice[]
+  orders    Order[]
+  positions Position[]
+  trades    Trade[]
+}
+
+model MarketPrice {
+  id           String   @id @default(uuid())
+  instrumentId String
+  lastPrice    Decimal  @db.Decimal(18, 4)
+  high         Decimal  @db.Decimal(18, 4)
+  low          Decimal  @db.Decimal(18, 4)
+  close        Decimal  @db.Decimal(18, 4)
+  volume       BigInt
+  timestamp    DateTime @default(now())
+
+  instrument Instrument @relation(fields: [instrumentId], references: [id])
+
+  @@index([instrumentId, timestamp])
+}
+
+model Order {
+  id                String      @id @default(uuid())
+  accountId         String
+  instrumentId      String
+  idempotencyKey    String      @unique
+  type              OrderType
+  side              OrderSide
+  quantity          Int
+  limitPrice        Decimal?    @db.Decimal(18, 4)
+  estimatedValue    Decimal     @db.Decimal(18, 4)
+  simulatedFee      Decimal     @db.Decimal(18, 4)
+  simulatedSlippage Decimal     @db.Decimal(18, 4)
+  status            OrderStatus @default(PENDING)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  executions Execution[]
+  account    Account     @relation(fields: [accountId], references: [id])
+  instrument Instrument  @relation(fields: [instrumentId], references: [id])
+
+  @@index([accountId, status])
+}
+
+model Execution {
+  id               String   @id @default(uuid())
+  orderId          String
+  accountId        String
+  executedQuantity Int
+  executedPrice    Decimal  @db.Decimal(18, 4)
+  simulatedFee     Decimal  @db.Decimal(18, 4)
+  executedAt       DateTime @default(now())
+
+  account      Account       @relation(fields: [accountId], references: [id])
+  order        Order         @relation(fields: [orderId], references: [id])
+  transactions Transaction[]
+}
+
+model Transaction {
+  id           String          @id @default(uuid())
+  accountId    String
+  executionId  String?
+  type         TransactionType
+  amount       Decimal         @db.Decimal(18, 4)
+  balanceAfter Decimal         @db.Decimal(18, 4)
+  description  String
+  createdAt    DateTime        @default(now())
+
+  account   Account    @relation(fields: [accountId], references: [id])
+  execution Execution? @relation(fields: [executionId], references: [id])
+
+  @@index([accountId, createdAt])
+}
+
+model Position {
+  id                String   @id @default(uuid())
+  accountId         String
+  instrumentId      String
+  quantity          Int
+  averageEntryPrice Decimal  @db.Decimal(18, 4)
+  unrealizedPnL     Decimal  @default(0) @db.Decimal(18, 4)
+  realizedPnL       Decimal  @default(0) @db.Decimal(18, 4)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  account    Account    @relation(fields: [accountId], references: [id])
+  instrument Instrument @relation(fields: [instrumentId], references: [id])
+
+  @@unique([accountId, instrumentId])
+}
+
+model Trade {
+  id           String    @id @default(uuid())
+  accountId    String
+  instrumentId String
+  side         OrderSide
+  quantity     Int
+  entryPrice   Decimal   @db.Decimal(18, 4)
+  exitPrice    Decimal?  @db.Decimal(18, 4)
+  realizedPnL  Decimal   @default(0) @db.Decimal(18, 4)
+  openedAt     DateTime  @default(now())
+  closedAt     DateTime?
+
+  journalEntry JournalEntry?
+  account      Account       @relation(fields: [accountId], references: [id])
+  instrument   Instrument    @relation(fields: [instrumentId], references: [id])
+
+  @@index([accountId, openedAt])
+  @@index([instrumentId, openedAt])
+}
+
+model PortfolioSnapshot {
+  id            String   @id @default(uuid())
+  accountId     String
+  totalValue    Decimal  @db.Decimal(18, 4)
+  cashBalance   Decimal  @db.Decimal(18, 4)
+  holdingsValue Decimal  @db.Decimal(18, 4)
+  unrealizedPnL Decimal  @db.Decimal(18, 4)
+  realizedPnL   Decimal  @db.Decimal(18, 4)
+  timestamp     DateTime @default(now())
+
+  account Account @relation(fields: [accountId], references: [id])
+
+  @@index([accountId, timestamp])
+}
+
+model JournalEntry {
+  id               String         @id @default(uuid())
+  userId           String
+  tradeId          String         @unique
+  entryReason      String
+  strategy         String
+  expectedOutcome  String
+  stopLossPrice    Decimal?       @db.Decimal(18, 4)
+  targetPrice      Decimal?       @db.Decimal(18, 4)
+  confidenceRating Int
+  emotionalState   EmotionalState
+
+  trade Trade @relation(fields: [tradeId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+}
+
+model LessonProgress {
+  id          String   @id @default(uuid())
+  userId      String
+  lessonId    String
+  completedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+  @@index([userId])
+  @@index([lessonId])
+}
+
+model Challenge {
+  id           String   @id @default(uuid())
+  title        String
+  description  String
+  badgeIcon    String
+  targetType   String
+  targetValue  Int
+  durationDays Int
+  createdAt    DateTime @default(now())
+
+  userChallenges UserChallenge[]
+}
+
+model UserChallenge {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  challengeId String
+  challenge   Challenge @relation(fields: [challengeId], references: [id])
+  progress    Int       @default(0)
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  startedAt   DateTime  @default(now())
+
+  @@unique([userId, challengeId])
+}
+
+// ============================================================
+// COMMUNITY
+// ============================================================
+
+model Post {
+  id        String   @id @default(uuid())
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comments Comment[]
+  likes    PostLike[]
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  postId    String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([postId, createdAt])
+  @@index([userId, createdAt])
+}
+
+model PostLike {
+  id        String   @id @default(uuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([userId])
+}
+
+model Follow {
+  id          String   @id @default(uuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  follower  User @relation("FollowingUser", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("FollowedUser", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, read])
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum OrderType {
+  MARKET
+  LIMIT
+}
+
+enum OrderSide {
+  BUY
+  SELL
+}
+
+enum OrderStatus {
+  PENDING
+  FILLED
+  CANCELLED
+  REJECTED
+}
+
+enum TransactionType {
+  DEPOSIT_SIMULATED
+  ORDER_BUY
+  ORDER_SELL
+  FEE_SIMULATED
+  REBALANCING
+}
+
+enum EmotionalState {
+  CALM
+  ANXIOUS
+  OVERCONFIDENT
+  FOMO
+  REVENUE_SEEKING
+  NEUTRAL
+}

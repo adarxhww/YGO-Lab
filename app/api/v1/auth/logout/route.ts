@@ -1,0 +1,24 @@
+import { NextResponse } from "next/server";
+
+import { clearSession } from "@/lib/auth";
+
+export async function POST() {
+  try {
+    await clearSession();
+
+    return NextResponse.json({
+      success: true,
+      message: "Logged out successfully",
+    });
+  } catch (error) {
+    console.error("POST /api/v1/auth/logout error:", error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Logout failed",
+      },
+      { status: 500 }
+    );
+  }
+}

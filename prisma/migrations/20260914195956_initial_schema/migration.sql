@@ -1,0 +1,14 @@
+-- CreateEnum
+CREATE TYPE "OrderType" AS ENUM ('MARKET', 'LIMIT');
+
+-- CreateEnum
+CREATE TYPE "OrderSide" AS ENUM ('BUY', 'SELL');
+
+-- CreateEnum
+CREATE TYPE "OrderStatus" AS ENUM ('PENDING', 'FILLED', 'CANCELLED', 'REJECTED');
+
+-- CreateEnum
+CREATE TYPE "TransactionType" AS ENUM ('DEPOSIT_SIMULATED', 'ORDER_BUY', 'ORDER_SELL', 'FEE_SIMULATED', 'REBALANCING');
+
+-- CreateEnum
+CREATE TYPE "EmotionalState" AS ENUM ('CALM', 'ANXIOUS', 'OVERCONFIDENT', 'FOMO', 'REVENUE_SEEKING', 'NEUTRAL');
